@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import * as Sentry from '@sentry/browser';
-import { analyzeImage, renderArtwork, exportArtwork } from './imageProcessor';
+import { analyzeImage, renderArtwork, exportArtwork, rgbToHex } from './imageProcessor';
 
 export default function App() {
   const [imageFile, setImageFile] = useState(null);
@@ -10,6 +10,7 @@ export default function App() {
   const [remix, setRemix] = useState(false);
   const [pixelMe, setPixelMe] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const [shape, setShape] = useState('rectangle');
   const canvasRef = useRef(null);
 
   const handleFileChange = (e) => {
@@ -24,6 +25,7 @@ export default function App() {
 
   const handleAnalyzeImage = async () => {
     if (!imgPreview) return;
+    console.log("Analyzing image...");
     await analyzeImage({
       imgPreview,
       numColors,
@@ -42,11 +44,34 @@ export default function App() {
     });
   };
 
+  const handleDownloadSwatch = () => {
+    if (palette.length === 0) return;
+    console.log("Downloading colour swatch file...");
+    let csvContent = "Color Index,RGB,HEX,Percentage\n";
+    palette.forEach((col, index) => {
+      const hex = rgbToHex(col.color);
+      csvContent += `${index + 1},${col.color},${hex},${col.percentage.toFixed(2)}%\n`;
+    });
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'colour-swatch.csv');
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   useEffect(() => {
     if (palette.length > 0) {
-      renderArtwork({ canvas: canvasRef.current, colors: palette, pixelMe });
+      renderArtwork({ 
+        canvas: canvasRef.current, 
+        colors: palette, 
+        pixelMe, 
+        remix, 
+        shape 
+      });
     }
-  }, [palette, pixelMe, remix]);
+  }, [palette, pixelMe, remix, shape]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-100 to-gray-300 text-gray-800 flex flex-col items-center p-4">
@@ -89,6 +114,19 @@ export default function App() {
             disabled={processing}
           />
         </div>
+        <div className="mb-4">
+          <label className="block mb-2 font-medium">Select final image shape</label>
+          <select
+            value={shape}
+            onChange={(e) => setShape(e.target.value)}
+            className="box-border cursor-pointer p-2 border rounded w-full"
+            disabled={processing}
+          >
+            <option value="rectangle">Rectangle</option>
+            <option value="square">Square</option>
+            <option value="circle">Circle</option>
+          </select>
+        </div>
         <div className="flex gap-4 mb-4">
           <button
             className="cursor-pointer bg-blue-500 text-white px-4 py-2 rounded"
@@ -126,6 +164,13 @@ export default function App() {
             disabled={processing || palette.length === 0}
           >
             Export as PNG
+          </button>
+          <button
+            className="cursor-pointer bg-gray-600 text-white px-4 py-2 rounded"
+            onClick={handleDownloadSwatch}
+            disabled={processing || palette.length === 0}
+          >
+            Download Colour Swatch
           </button>
         </div>
         <canvas
